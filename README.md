@@ -6,43 +6,53 @@ A production-grade email scheduler service and frontend dashboard built for the 
 
 ### Backend
 - **Scheduler**: Utilizes BullMQ's delayed jobs feature backed by Redis (no cron jobs used) to handle reliable execution of scheduled tasks.
-- **Persistence**: BullMQ guarantees job idempotency and persistence. If the server crashes or restarts, future scheduled emails will remain safely in Redis and execute precisely at their requested time when the worker comes back online.
-- **Rate Limiting & Concurrency**: Configurable `WORKER_CONCURRENCY` handles multiple jobs in parallel. Redis is used for strict rate limiting (max emails per hour per sender). If a sender hits their limit, their remaining jobs are delayed into the next hour window rather than dropping them.
+- **Persistence**: BullMQ guarantees job idempotency and persistence. Scheduled jobs survive server restarts and crashes.
+- **Rate Limiting**: Redis is used for strict rate limiting (max emails per hour per sender). If a limit is hit, remaining jobs are delayed into the next hour window rather than dropping them.
+- **Concurrency**: Configurable `WORKER_CONCURRENCY` handles multiple email-sending jobs in parallel.
 - **Minimum Delays**: Throttles individual email sends via a configured minimum delay logic inside the worker to mimic real-world provider throttling.
 - **Slack Notifications**: Integrating Slack OAuth, when an hourly rate limit is hit, an automated alert is fired to the user's connected Slack channel.
 - **Elasticsearch Search**: Seamlessly indexes email jobs to Elasticsearch upon completion for fast, scalable searching.
 - **Ethereal SMTP**: Mocks successful/failed email delivery using Ethereal's test SMTP service.
 
 ### Frontend
-- **Google OAuth Login**: Complete authentication flow with Google via `@react-oauth/google`.
-- **Dashboard Interface**: A clean, modern UI built with Tailwind CSS mimicking professional SaaS applications.
+- **Login / Authentication**: Sleek mock Google authentication flow (can easily be swapped to real OAuth) storing user sessions.
+- **Dashboard Interface**: A clean, modern UI built with Tailwind CSS v4 in Dark Mode mimicking premium SaaS applications.
 - **Compose Interface**: A modal form enabling users to set subjects, bodies, start times, limits, and **upload `.csv` files** of leads to queue immediately.
-- **Email Tables**: Live "Scheduled" and "Sent / Failed" tracking tables.
+- **Email Tables**: Live "Scheduled" and "Sent / Failed" tracking tables with clickable rows to view full email contents.
+- **Delete Functionality**: Capability to instantly delete scheduled emails, removing them from PostgreSQL, Redis, and Elasticsearch simultaneously.
 - **Elasticsearch Querying**: Live search input directly filtering emails via the backend Elasticsearch cluster.
 
 ---
 
 ## 🛠️ Architecture Overview
 
-The system uses a **Monorepo** structure:
-- **`backend`**: Express.js + TypeScript REST API. Uses Prisma ORM to interact with PostgreSQL. A BullMQ worker constantly listens for delayed jobs and processes them with defined concurrency. Redis handles both the BullMQ queue and rate-limiting distributed counters.
-- **`frontend`**: React + TypeScript (Vite). Interfaces with the backend REST endpoints.
-- **Infrastructure (`docker-compose.yml`)**: PostgreSQL (port 5434), Redis, and Elasticsearch. 
+The system uses a **Monorepo** structure separating the `backend` and `frontend`. 
+
+### How Scheduling Works
+When a user uploads a CSV and schedules an email outreach, the backend loops through the recipients and creates an `EmailJob` in PostgreSQL with `status: 'SCHEDULED'`. Simultaneously, it calculates the delay from the current time to the requested scheduled time in milliseconds and adds the job to the **BullMQ** queue with that specific delay. The BullMQ worker continuously listens for jobs whose delay has expired and processes them.
+
+### How Persistence on Restart is Handled
+Because BullMQ stores the entire job queue state in **Redis** rather than in local memory, the queue is highly resilient. If the Node.js backend crashes, is killed, or restarts, no scheduled emails are lost. When the server boots back up and reconnects to Redis, the BullMQ worker simply resumes where it left off, instantly processing any jobs whose scheduled time arrived while the server was offline.
+
+### How Rate Limiting & Concurrency are Implemented
+- **Concurrency**: The BullMQ worker is instantiated with a `concurrency` setting (driven by the `WORKER_CONCURRENCY` env variable). This allows the Node.js process to pick up and process exactly that many jobs in parallel asynchronously.
+- **Rate Limiting**: To respect hourly limits, the worker uses Redis to maintain a counter of emails sent by each specific sender within the current hour. Before sending an email, it checks this counter. If the limit (`MAX_EMAILS_PER_HOUR_PER_SENDER`) is reached, the worker throws a specific `RateLimitError`. BullMQ is configured to catch this error, apply an exponential backoff (or push it to the next hour), and safely return the job to the queue without marking it as failed.
 
 ---
 
 ## 💻 Setup & Installation
 
-### 1. Prerequisites
-- [Docker & Docker Compose](https://www.docker.com/) (Required for DB, Redis, and ES)
-- [Node.js](https://nodejs.org/) (v16+)
-
-### 2. Environment Variables & Ethereal setup
+### 1. How to set up Ethereal Email and env variables
 Create a `.env` file in the `backend/` directory (`backend/.env`). A sample configuration:
 
 ```env
 PORT=4000
 DATABASE_URL="postgresql://admin:adminpassword@localhost:5434/reachinbox?schema=public"
+# When using Docker Compose, use these hostnames:
+# DATABASE_URL="postgresql://admin:adminpassword@postgres:5432/reachinbox?schema=public"
+# REDIS_URL="redis://redis:6379"
+# ELASTICSEARCH_URL="http://elasticsearch:9200"
+
 REDIS_URL="redis://127.0.0.1:6379"
 ELASTICSEARCH_URL="http://localhost:9200"
 
@@ -56,50 +66,41 @@ SMTP_HOST="smtp.ethereal.email"
 SMTP_PORT=587
 SMTP_USER="your_ethereal_email@ethereal.email"
 SMTP_PASS="your_ethereal_password"
-
-# OAuth (For live testing)
-GOOGLE_CLIENT_ID="your_google_client_id"
-SLACK_CLIENT_ID="your_slack_client_id"
 ```
 *(To get Ethereal credentials, simply visit [ethereal.email](https://ethereal.email/create), click "Create Account", and paste the provided SMTP Username and Password into your `.env`.)*
 
-### 3. Spin up Infrastructure
-From the root directory, start the required databases via Docker:
-```bash
-docker-compose up -d
-```
-*(Note: If this is your first time, the Elasticsearch image is large and may take a few minutes to download).*
+### 2. How to run backend
+*Note: Make sure you have Docker running to spin up PostgreSQL, Redis, and Elasticsearch using `docker-compose up -d` in the root folder before starting the backend.*
 
-### 4. Install Dependencies
-Install packages for the monorepo from the root:
-```bash
-npm install
-```
-
-### 5. Setup the Database
-Navigate to the backend and push the Prisma schema to create the PostgreSQL tables:
 ```bash
 cd backend
+npm install
+npx prisma generate
 npx prisma db push
-cd ..
+npm run dev
+```
+The backend API and BullMQ worker will start on `http://localhost:4000`.
+
+### 3. How to run frontend
+Create a `.env` file in the `frontend/` directory (if you want to override the default local API url):
+```env
+VITE_API_URL=http://localhost:4000/api
 ```
 
-### 6. Run the Application
-You can run both the frontend and backend simultaneously from the root directory using the monorepo script:
+Run the React development server:
 ```bash
-npm run start:all
+cd frontend
+npm install
+npm run dev
 ```
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:4000
+The frontend dashboard will be available at `http://localhost:5173`.
 
 ---
 
-## 🧪 Testing the Scheduler Resilience
+### Alternative: Run Everything via Docker
+If you want to run the **Backend, Frontend, and all 3 Databases** simultaneously without manually installing Node modules, run this single command in the root folder:
 
-To test that jobs survive a server restart without relying on cron jobs:
-1. Start the app and log in to the frontend.
-2. Click **Compose New** and schedule a CSV batch of emails for **5 minutes in the future**.
-3. Verify they appear in the **Scheduled** tab.
-4. Kill the backend Node.js process (`Ctrl+C`).
-5. Wait a few seconds, then restart the backend (`npm run start:all`).
-6. Observe that when the scheduled time arrives, the BullMQ worker seamlessly processes and sends the emails without restarting from scratch or duplicating jobs!
+```bash
+docker-compose up -d --build
+```
+This builds the Dockerfiles for both services and connects them automatically. The app will be accessible at `http://localhost:5173`.
