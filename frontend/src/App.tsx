@@ -68,10 +68,7 @@ const Dashboard = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    navigate('/');
-  };
+
 
   const displayedEmails = searchQuery.length > 2 ? searchResults : (activeTab === 'scheduled' ? scheduled : sent);
 

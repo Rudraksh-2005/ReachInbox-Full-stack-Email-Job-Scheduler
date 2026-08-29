@@ -9,7 +9,7 @@ export const Login: React.FC = () => {
   const [name, setName] = useState('Demo User');
   const [email, setEmail] = useState('demo@reachinbox.ai');
 
-  const handleSuccess = (credentialResponse: any) => {
+  const handleSuccess = (_credentialResponse: any) => {
     localStorage.setItem('user', JSON.stringify({ id: 'user_123', name: 'Demo User', email: 'demo@reachinbox.ai' }));
     navigate('/dashboard');
   };
