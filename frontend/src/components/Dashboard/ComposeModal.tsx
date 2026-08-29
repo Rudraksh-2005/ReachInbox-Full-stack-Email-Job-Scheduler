@@ -18,6 +18,7 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, use
   const [delay, setDelay] = useState('2000');
   const [hourlyLimit, setHourlyLimit] = useState('200');
   const [leads, setLeads] = useState<string[]>([]);
+  const [singleEmail, setSingleEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,8 +40,16 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, use
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (leads.length === 0) {
-      setError('Please upload a CSV with at least one valid email lead.');
+    
+    const finalLeads = [...leads];
+    if (singleEmail) {
+      // Very basic validation, split by commas if they want to put multiple
+      const parsedEmails = singleEmail.split(',').map(e => e.trim()).filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+      finalLeads.push(...parsedEmails);
+    }
+
+    if (finalLeads.length === 0) {
+      setError('Please provide at least one recipient email or upload a CSV.');
       return;
     }
     if (!scheduledTime) {
@@ -52,7 +61,7 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, use
     setError('');
 
     try {
-      const emailPayloads = leads.map(recipient => ({
+      const emailPayloads = finalLeads.map(recipient => ({
         recipient,
         subject,
         body,
@@ -123,7 +132,18 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, use
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Upload Leads (CSV)</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Recipient Email(s)</label>
+                <input
+                  type="text"
+                  value={singleEmail}
+                  onChange={(e) => setSingleEmail(e.target.value)}
+                  className="w-full px-4 py-2 bg-gray-950 border border-gray-800 rounded-lg focus:ring-1 focus:ring-brand-500 focus:border-brand-500 outline-none transition text-sm text-gray-300 placeholder-gray-600"
+                  placeholder="name@example.com, ..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Or Upload Leads (CSV)</label>
                 <div className="relative">
                   <input
                     type="file"
@@ -137,12 +157,13 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, use
                     className="flex items-center justify-center w-full px-4 py-2 bg-gray-950 border border-gray-800 border-dashed rounded-lg cursor-pointer hover:bg-gray-800 transition text-sm text-gray-400"
                   >
                     <Upload className="w-4 h-4 mr-2" />
-                    {leads.length > 0 ? `${leads.length} leads loaded` : 'Choose CSV File'}
+                    {leads.length > 0 ? `${leads.length} loaded` : 'Choose CSV'}
                   </label>
                 </div>
               </div>
+            </div>
 
-              <div>
+            <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Start Time</label>
                 <input
                   type="datetime-local"
@@ -152,7 +173,6 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, use
                   className="w-full px-4 py-2 bg-gray-950 border border-gray-800 rounded-lg focus:ring-1 focus:ring-brand-500 focus:border-brand-500 outline-none transition text-sm text-gray-300"
                 />
               </div>
-            </div>
 
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-800 mt-2">
               <div>
