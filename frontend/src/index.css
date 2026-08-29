@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #0f172a;
+  --color-brand-100: #1e293b;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-900: #eff6ff;
+  --color-gray-950: #09090b;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-gray-950);
+    color: var(--color-gray-100);
+  }
+}

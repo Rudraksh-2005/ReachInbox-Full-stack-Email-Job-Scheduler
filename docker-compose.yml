@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: reachinbox_postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: reachinbox
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: reachinbox_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.4
+    container_name: reachinbox_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: reachinbox_backend
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - DATABASE_URL=postgresql://admin:adminpassword@postgres:5432/reachinbox?schema=public
+      - REDIS_URL=redis://redis:6379
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - MAX_EMAILS_PER_HOUR_PER_SENDER=200
+      - MIN_DELAY_BETWEEN_EMAILS_MS=2000
+      - WORKER_CONCURRENCY=5
+      # Add your Ethereal/SMTP variables here for production
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: reachinbox_frontend
+    ports:
+      - "5173:80" # Maps localhost:5173 to Nginx port 80
+    environment:
+      - VITE_API_URL=http://localhost:4000/api
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  es_data:

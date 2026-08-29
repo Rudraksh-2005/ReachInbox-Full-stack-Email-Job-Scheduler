@@ -1,0 +1,19 @@
+{
+  "name": "reachinbox-scheduler",
+  "version": "1.0.0",
+  "description": "ReachInbox Full-stack Email Job Scheduler",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "start": "docker-compose up -d && npm run start:all",
+    "start:all": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "stop": "docker-compose down",
+    "install:all": "npm install && npm install -w backend && npm install -w frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

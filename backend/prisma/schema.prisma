@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String     @id @default(uuid())
+  googleId       String?    @unique
+  email          String     @unique
+  name           String?
+  avatar         String?
+  slackToken     String?    // Storing Slack OAuth token for notifications
+  slackChannelId String?
+  emailJobs      EmailJob[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model EmailJob {
+  id             String    @id @default(uuid())
+  subject        String
+  body           String
+  recipient      String
+  senderEmail    String    // The Ethereal email or whatever
+  scheduledTime  DateTime
+  status         JobStatus @default(PENDING)
+  bullJobId      String?   // The ID of the job in BullMQ
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  sentAt         DateTime?
+}
+
+enum JobStatus {
+  PENDING
+  SCHEDULED
+  SENT
+  FAILED
+}
