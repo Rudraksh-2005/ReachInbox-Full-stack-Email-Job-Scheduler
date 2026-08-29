@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Login } from './components/Auth/GoogleLogin';
 import { Header } from './components/Dashboard/Header';
 import { EmailTable } from './components/Dashboard/EmailTable';
